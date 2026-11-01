@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Wolfer Web Tools: a Termux-ready Python tool that extracts a site's HTML, CSS and JavaScript into a clean local folder.">
+<meta name="color-scheme" content="dark">
+<title>Wolfer Web Tools | Web structure and source extraction</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #05070d;
+    --glass: rgba(255, 255, 255, 0.045);
+    --glass-strong: rgba(255, 255, 255, 0.075);
+    --edge: rgba(255, 255, 255, 0.11);
+    --red: #ef4444;
+    --orange: #f97316;
+    --cyan: #22d3ee;
+    --green: #4ade80;
+    --text: #eef0f5;
+    --muted: #8b93a7;
+    --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    line-height: 1.65;
+    min-height: 100vh;
+    overflow-x: hidden;
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -2;
+    background:
+      radial-gradient(520px 520px at 12% 8%, rgba(239, 68, 68, 0.32), transparent 70%),
+      radial-gradient(560px 560px at 92% 30%, rgba(249, 115, 22, 0.20), transparent 70%),
+      radial-gradient(480px 480px at 40% 105%, rgba(34, 211, 238, 0.12), transparent 70%),
+      var(--bg);
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+  }
+  a { color: inherit; text-decoration: none; }
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 4px; }
+
+  .wrap { width: min(1080px, 100% - 40px); margin-inline: auto; }
+
+  /* nav */
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 22px 0; gap: 16px; }
+  .brand { font-weight: 700; letter-spacing: 0.04em; }
+  .brand span { color: var(--red); }
+  nav ul { display: flex; gap: 22px; list-style: none; font-size: 14px; color: var(--muted); }
+  nav ul a:hover { color: var(--text); }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; padding: 56px 0 80px; }
+  h1 { font-size: clamp(32px, 5.4vw, 56px); line-height: 1.08; letter-spacing: -0.02em; margin-bottom: 20px; }
+  h1 em { font-style: normal; background: linear-gradient(90deg, var(--red), var(--orange)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { color: var(--muted); max-width: 46ch; margin-bottom: 30px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; padding: 12px 20px; border-radius: 10px;
+    font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; border: 1px solid var(--edge);
+    transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn.primary { background: linear-gradient(90deg, var(--red), var(--orange)); border-color: transparent; color: #17060a; box-shadow: 0 8px 30px rgba(239, 68, 68, 0.28); }
+  .btn.ghost { background: var(--glass); color: var(--text); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .btn.ghost:hover { background: var(--glass-strong); }
+
+  /* glass */
+  .glass {
+    background: var(--glass);
+    border: 1px solid var(--edge);
+    border-radius: 16px;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* terminal */
+  .term { overflow: hidden; }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid var(--edge); font-size: 12px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #3a3f4d; }
+  .dot:nth-child(1) { background: var(--red); }
+  .dot:nth-child(2) { background: var(--orange); }
+  .dot:nth-child(3) { background: var(--green); }
+  .term-bar span { margin-left: 8px; }
+  .term pre { padding: 18px 18px 22px; font: 12.5px/1.75 var(--mono); overflow-x: auto; white-space: pre; }
+  .term .ln { display: block; opacity: 0; animation: show .01s forwards; }
+  .c { color: var(--cyan); } .g { color: var(--green); } .r { color: var(--red); } .m { color: var(--muted); } .w { color: var(--text); }
+  @keyframes show { to { opacity: 1; } }
+  .term .ln:nth-child(1) { animation-delay: .3s; }
+  .term .ln:nth-child(2) { animation-delay: 1.0s; }
+  .term .ln:nth-child(3) { animation-delay: 1.5s; }
+  .term .ln:nth-child(4) { animation-delay: 2.0s; }
+  .term .ln:nth-child(5) { animation-delay: 2.6s; }
+  .term .ln:nth-child(6) { animation-delay: 3.0s; }
+  .term .ln:nth-child(7) { animation-delay: 3.4s; }
+  .term .ln:nth-child(8) { animation-delay: 3.9s; }
+  .caret { display: inline-block; width: 8px; height: 14px; background: var(--green); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* sections */
+  section { padding: 56px 0; }
+  h2 { font-size: clamp(22px, 3.4vw, 32px); letter-spacing: -0.01em; margin-bottom: 10px; }
+  .sub { color: var(--muted); max-width: 56ch; margin-bottom: 32px; }
+
+  .features { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+  .feat { padding: 24px; }
+  .feat h3 { font-size: 16px; margin-bottom: 8px; }
+  .feat p { color: var(--muted); font-size: 14px; }
+  .feat:nth-child(1) { grid-column: span 4; }
+  .feat:nth-child(2) { grid-column: span 2; }
+  .feat:nth-child(3) { grid-column: span 2; }
+  .feat:nth-child(4) { grid-column: span 4; }
+  .tree { margin-top: 16px; font-size: 13px; color: var(--muted); white-space: pre; overflow-x: auto; }
+  .tree b { color: var(--green); font-weight: 400; }
+
+  /* install */
+  .steps { display: grid; gap: 12px; list-style: none; counter-reset: s; }
+  .step { display: flex; align-items: center; gap: 14px; padding: 14px 16px; counter-increment: s; }
+  .step::before { content: counter(s); flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: var(--red); border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); }
+  .step code { flex: 1; font: 13.5px var(--mono); overflow-x: auto; white-space: nowrap; color: var(--text); }
+  .step code::before { content: "$ "; color: var(--muted); }
+  .copy { flex: none; font: 12px var(--mono); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--edge); background: var(--glass); color: var(--muted); cursor: pointer; }
+  .copy:hover { color: var(--text); background: var(--glass-strong); }
+  .notice { margin-top: 22px; padding: 14px 18px; border-left: 3px solid var(--orange); background: rgba(249, 115, 22, 0.07); border-radius: 0 10px 10px 0; font-size: 13.5px; color: #d9c2ad; }
+
+  /* footer */
+  footer { margin-top: 40px; padding: 30px 0 44px; border-top: 1px solid var(--edge); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; color: var(--muted); font-size: 13px; }
+  footer a:hover { color: var(--red); }
+  footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; padding-top: 28px; }
+    .features { grid-template-columns: 1fr; }
+    .feat:nth-child(n) { grid-column: auto; }
+    nav ul { gap: 14px; }
+  }
+  @media (max-width: 480px) {
+    nav ul li:nth-child(1) { display: none; }
+    .step { flex-wrap: wrap; }
+    .step code { flex-basis: calc(100% - 42px); }
+    .copy { margin-left: 42px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .term .ln { opacity: 1; animation: none; }
+    .caret { animation: none; }
+    .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#top">WOLFER<span>/</span>WEB TOOLS</a>
+    <ul>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="https://github.com/ravexadmain-png/wolfer-web-tools" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <header class="hero" id="top">
+    <div>
+      <h1>Pull the structure out of any <em>web page</em>.</h1>
+      <p class="lead">Wolfer Web Tools fetches a page, finds every stylesheet and script it depends on, and saves the lot into a tidy local folder. Written in Python. Runs in Termux.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/ravexadmain-png/wolfer-web-tools" target="_blank" rel="noopener">View on GitHub</a>
+        <a class="btn ghost" href="https://youtube.com/@wolfertools0692" target="_blank" rel="noopener">Watch on YouTube</a>
+      </div>
+    </div>
+
+    <div class="glass term" aria-label="Example terminal session">
+      <div class="term-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>wolfer@termux</span></div>
+<pre><span class="ln"><span class="r">wolfer@termux</span><span class="m">:~$</span> python main.py example.com</span>
+<span class="ln"><span class="c">[*]</span> target   : https://example.com/</span>
+<span class="ln"><span class="g">[+]</span> main document received (4.2 KB)</span>
+<span class="ln"><span class="c">[*]</span> located  : 2 stylesheet(s), 3 script(s)</span>
+<span class="ln"><span class="g">[+]</span> saved <span class="g">assets/css/main.css</span> (14.8 KB)</span>
+<span class="ln"><span class="g">[+]</span> saved <span class="g">assets/js/app.js</span> (62.1 KB)</span>
+<span class="ln"><span class="g">[+]</span> extraction complete</span>
+<span class="ln"><span class="r">wolfer@termux</span><span class="m">:~$</span> <span class="caret"></span></span></pre>
+    </div>
+  </header>
+
+  <section id="features">
+    <h2>What it does</h2>
+    <p class="sub">One URL in, a working local copy of the page's front-end out.</p>
+    <div class="features">
+      <article class="glass feat">
+        <h3>Finds every stylesheet and script</h3>
+        <p>The page is parsed with BeautifulSoup. Each external CSS and JavaScript file is located, resolved to a full address, and downloaded, even when the page uses relative or protocol-free links.</p>
+        <div class="tree">output/example.com/
+  <b>index.html</b>
+  index.original.html
+  assets/
+    css/
+    js/</div>
+      </article>
+      <article class="glass feat">
+        <h3>Ready to open offline</h3>
+        <p>The saved index.html points at the local copies. The untouched original is kept beside it.</p>
+      </article>
+      <article class="glass feat">
+        <h3>Safe by default</h3>
+        <p>Timeouts, retries, and a file size cap. A failed download never stops the run.</p>
+      </article>
+      <article class="glass feat">
+        <h3>Made for Termux</h3>
+        <p>Pure Python with two dependencies, requests and beautifulsoup4. Nothing to compile, no root needed, and the menu fits a phone screen.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install in Termux</h2>
+    <p class="sub">Five commands from a fresh Termux session.</p>
+    <ol class="steps">
+      <li class="glass step"><code>pkg update &amp;&amp; pkg install python git -y</code><button class="copy" type="button">Copy</button></li>
+      <li class="glass step"><code>git clone https://github.com/ravexadmain-png/wolfer-web-tools</code><button class="copy" type="button">Copy</button></li>
+      <li class="glass step"><code>cd wolfer-web-tools</code><button class="copy" type="button">Copy</button></li>
+      <li class="glass step"><code>pip install -r requirements.txt</code><button class="copy" type="button">Copy</button></li>
+      <li class="glass step"><code>python main.py</code><button class="copy" type="button">Copy</button></li>
+    </ol>
+    <p class="notice">Use Wolfer Web Tools only on websites you own or have permission to copy. You are responsible for how you use what you download.</p>
+  </section>
+
+  <footer>
+    <span>Built by Arman Hossen</span>
+    <div class="links">
+      <a href="https://youtube.com/@wolfertools0692" target="_blank" rel="noopener">@wolfertools0692</a>
+      <a href="https://github.com/ravexadmain-png/wolfer-web-tools" target="_blank" rel="noopener">Source code</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var text = btn.previousElementSibling.textContent;
+      function done() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1400); }
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+      } else {
+        var t = document.createElement("textarea");
+        t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
+        document.body.appendChild(t); t.select();
+        try { document.execCommand("copy"); done(); } catch (e) {}
+        document.body.removeChild(t);
+      }
+    });
+  });
+</script>
+</body>
+</html>
